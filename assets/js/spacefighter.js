@@ -1,7 +1,11 @@
 let ship_speed = 10;
 
-let canvas_width = 1024;
-let canvas_height = 512;
+// let canvas_width = 1024;
+// let canvas_height = 512;
+
+let canvas_width = window.innerWidth;
+let canvas_height = window.innerHeight;
+
 
 //Aliases
 let Application = PIXI.Application,
@@ -26,14 +30,20 @@ canvas_container.appendChild(app.view);
 
 
 app.renderer.backgroundColor = 0x151a3d;
+app.renderer.view.style.position = "absolute";
+app.renderer.view.style.display = "block";
+app.renderer.autoResize = true;
+app.renderer.resize(window.innerWidth, window.innerHeight);
 
 let ship, state;
 let meteorites = [];
 let bullets = [];
+let debris = [];
 let counter = 0;
-let speed_factor = 5;
+let speed_factor = 20;
 let lives_left = 3;
 let life;
+let speed_display;
 
 let style = new PIXI.TextStyle({fill: "white"});
 
@@ -43,22 +53,27 @@ function setup() {
 
 
     ship = new Sprite(resources.ship.texture);
+    ship.width = 64;
+    ship.height = 64;
     ship.x = (canvas_width / 2 - ship.width / 2);
     ship.y = (canvas_height - ship.height);
 
     ship.vx = 0;
     ship.vy = 0;
-    ship.width = 64;
-    ship.height = 64;
     app.stage.addChild(ship);
 
 
-
     // controls
-    let left = keyboard("ArrowLeft"),
-        up = keyboard("ArrowUp"),
-        right = keyboard("ArrowRight"),
-        down = keyboard("ArrowDown"),
+    // let left = keyboard("ArrowLeft"),
+    //     up = keyboard("ArrowUp"),
+    //     right = keyboard("ArrowRight"),
+    //     down = keyboard("ArrowDown"),
+    //     space = keyboard(" ");
+
+    let left = keyboard("a"),
+        up = keyboard("w"),
+        right = keyboard("d"),
+        down = keyboard("s"),
         space = keyboard(" ");
 
     left.press = () => {
@@ -103,11 +118,23 @@ function gameLoop(delta) {
 }
 
 function play(delta) {
+    if (lives_left <= 0) {
+        app.ticker.stop();
+        let game_over_screen = new PIXI.Text("GAME OVER", new PIXI.TextStyle({fill: "yellow", fontSize: 64}));
+        game_over_screen.x = (canvas_width / 2 - game_over_screen.width / 2);
+        game_over_screen.y = (canvas_height / 2 - game_over_screen.height / 2);
+        app.stage.addChild(game_over_screen)
+    }
 
     app.stage.removeChild(life);
     life = new PIXI.Text(lives_left, style);
     life.x = (canvas_width - life.width);
     app.stage.addChild(life);
+
+    app.stage.removeChild(speed_display);
+    speed_display = new PIXI.Text(speed_factor, style);
+    speed_display.x = (canvas_width - life.width - speed_display.width * 2);
+    app.stage.addChild(speed_display);
 
     // custom ticker
     (counter === 500) ? counter = 0 : counter++;
@@ -115,13 +142,26 @@ function play(delta) {
     if (!(((ship.x + ship.vx + ship.width) > canvas_width) || ((ship.x + ship.vx) < 0))) {
         ship.x += ship.vx;
     }
+
     if (!(((ship.y + ship.vy + ship.height) > canvas_height) || ((ship.y + ship.vy) < 0))) {
         ship.y += ship.vy;
     }
 
-    if (counter % 40 === 0) spawnMeteorite(speed_factor);
-    // if (counter % 500 === 0) speed_factor += 1;
+    // if (counter % (500 - speed_factor) === 0) {
+    //     spawnMeteorite(speed_factor);
+    // }
 
+    if (counter % 20 === 0) {
+        spawnMeteorite(speed_factor);
+    }
+
+    if (counter % 10 === 0) {
+        spawnDebris(speed_factor)
+    }
+
+    if (counter % 100 === 0 && speed_factor < 500) {
+        speed_factor += 0.5
+    }
 
     meteorites.forEach(function (m) {
         m.y += m.vy;
@@ -130,7 +170,10 @@ function play(delta) {
             delete meteorites[meteorites.indexOf(m)]
         }
         if (hitTestRectangle(ship, m)) {
-            lives_left -= 1
+            lives_left -= 1;
+            app.stage.removeChild(m);
+            delete meteorites[meteorites.indexOf(m)]
+
         }
 
         bullets.forEach(function (b) {
@@ -147,50 +190,80 @@ function play(delta) {
                 delete bullets[bullets.indexOf(b)]
             }
 
-        })
-
+        });
     });
+
+
+    debris.forEach(function (d) {
+        d.y += d.vy;
+        if (d.y > canvas_height) {
+            app.stage.removeChild(d);
+            delete debris[debris.indexOf(d)]
+        }
+    });
+
 
     bullets.forEach(function (b) {
         b.y += b.vy;
-
+        b.x += b.vx
     })
 
 
 }
 
-function shoot(s) {
+function shoot(ship) {
+    spawnBullet(ship, ship.x, ship.y);
+    spawnBullet(ship, (ship.width + ship.x), ship.y)
+}
 
+function spawnBullet(ship, x, y) {
     let bullet = new Graphics();
     bullet.beginFill(0xf44242);
     // bullet.drawCircle(0, 0, 32);
     bullet.drawRect(0, 0, 4, 8);
     bullet.endFill();
 
-    bullet.x = (s.x + (s.width / 2));
-    bullet.y = s.y;
+    // bullet.x = (ship.x + (ship.width / 2));
+    bullet.x = x;
+    // bullet.y = ship.y;
+    bullet.y = y;
 
     bullet.vy = -20;
+    bullet.vx = (ship.vx * 0.5);
 
     app.stage.addChild(bullet);
     bullets.push(bullet);
 }
 
 function spawnMeteorite(speed_factor) {
-
     let meteorite = new Graphics();
-    meteorite.beginFill(0xFFFFFF);
+    meteorite.beginFill(0xa66441);
     // meteorite.drawCircle(0, 0, 32);
-    meteorite.drawRect(0, 0, 32, 16);
+    meteorite.drawRect(0, 0, 16, 32);
     meteorite.endFill();
 
     meteorite.x = (Math.random() * canvas_width);
     meteorite.y = 0;
 
-    meteorite.vy = speed_factor;
+    meteorite.vy = speed_factor / 4;
 
     app.stage.addChild(meteorite);
     meteorites.push(meteorite);
+}
+
+function spawnDebris(speed_factor) {
+    let star = new Graphics();
+    star.beginFill(0xFFFFFF);
+    star.drawRect(0, 0, 1, 2);
+    debris.fillOpacity = Math.random();
+    star.endFill();
+
+    star.x = (Math.random() * canvas_width);
+    star.y = 0;
+    star.vy = (speed_factor / 4 * Math.random());
+
+    app.stage.addChild(star);
+    debris.push(star)
 }
 
 function keyboard(value) {
